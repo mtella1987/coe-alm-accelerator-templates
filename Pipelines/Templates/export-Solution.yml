@@ -123,9 +123,10 @@ steps:
 
 # TEMPORARY WORKAROUND: Power Apps CLI functionality will eventually be surfaced in Azure DevOps tasks.
 # However, to use functionality ahead of the tasks, we install the CLI.  Once the task is available, we move to using the task.
-- template: install-pac.yml
-  parameters:
-    canvasUnpackVersion: ''
+# Temporarily reverting to PASOPA instead of PAC CLI to better control versioning of canvas unpack in our pipelines
+#- template: install-pac.yml
+#  parameters:
+#    canvasUnpackVersion: ''
 
 - powershell: |
     #Set variable to continue on unpack error for use in the next two steps
@@ -140,9 +141,10 @@ steps:
    Get-ChildItem -Path "$(Build.SourcesDirectory)\${{parameters.repo}}\${{parameters.solutionName}}" -Recurse -Filter *.msapp | 
    ForEach-Object {
         $unpackedPath = $_.FullName.Replace(".msapp", "_msapp_src")
-        $env:PATH = $env:PATH + ";" + "$(pacPath)"
-        # Adding a temporary try / catch here to handle unexpected errors in canvas unpack. This is not idea, however, we need to ensure that breaking changes in unpack don't leave the pipelines permanently broken
-        pac canvas unpack --msapp $_.FullName --sources $unpackedPath
+        # Temporarily reverting to PASOPA instead of PAC CLI to better control versioning of canvas unpack in our pipelines
+        $(Agent.BuildDirectory)\PipelineUtils\CanvasUnpack\pasopa.exe -unpack $_.FullName $unpackedPath
+        #$env:PATH = $env:PATH + ";" + "$(pacPath)"
+        #pac canvas unpack --msapp $_.FullName --sources $unpackedPath
         del $_.FullName
    }
   displayName: 'Unpack msapp files fail on error'
@@ -154,9 +156,11 @@ steps:
    Get-ChildItem -Path "$(Build.SourcesDirectory)\${{parameters.repo}}\${{parameters.solutionName}}" -Recurse -Filter *.msapp | 
    ForEach-Object {
         $unpackedPath = $_.FullName.Replace(".msapp", "_msapp_src")
-        $env:PATH = $env:PATH + ";" + "$(pacPath)"
-        # Adding a temporary try / catch here to handle unexpected errors in canvas unpack. This is not idea, however, we need to ensure that breaking changes in unpack don't leave the pipelines permanently broken
-        pac canvas unpack --msapp $_.FullName --sources $unpackedPath
+        #$env:PATH = $env:PATH + ";" + "$(pacPath)"
+        #pac canvas unpack --msapp $_.FullName --sources $unpackedPath
+        # Temporarily reverting to PASOPA instead of PAC CLI to better control versioning of canvas unpack in our pipelines
+        $(Agent.BuildDirectory)\PipelineUtils\CanvasUnpack\pasopa.exe -unpack $_.FullName $unpackedPath
+
         if( -not $?)
         {
             $msg = $Error[0].Exception.Message

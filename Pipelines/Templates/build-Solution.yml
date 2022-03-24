@@ -63,11 +63,12 @@ steps:
 
 # TEMPORARY WORKAROUND: Power Apps CLI functionality will eventually be surfaced in Azure DevOps tasks.
 # However, to use functionality ahead of the tasks, we install the CLI.  Once the task is available, we move to using the task.
-- template: install-pac.yml
-  parameters:
-    canvasUnpackVersion: $(ManifestVersion)
+# Temporarily reverting to PASOPA instead of PAC CLI to better control versioning of canvas unpack in our pipelines
+#- template: install-pac.yml
+#  parameters:
+#    canvasUnpackVersion: $(ManifestVersion)
 
-# Use temp exe from PowerShell to pack source files into msapp
+# Pack canvas app source files into msapp
 - pwsh: |
    $solutionSource = "$(Build.SourcesDirectory)\$(RepoName)\$(SolutionName)"
    # We need to keep the source of the canvas app in temp for later use in canvas test automation
@@ -77,9 +78,11 @@ steps:
      $unpackedPath = $_.FullName
      $packedFileName = $unpackedPath.Replace("_msapp_src", ".msapp")
      if(!(Test-Path $packedFileName)) {
-        Write-Host "Packing $(pacPath)"
-         $env:PATH = $env:PATH + ";" + "$(pacPath)"
-         pac canvas pack --sources $unpackedPath --msapp $packedFileName     
+        # Temporarily reverting to PASOPA instead of PAC CLI to better control versioning of canvas unpack in our pipelines
+        $(Agent.BuildDirectory)\PipelineUtils\CanvasUnpack\pasopa.exe -pack $packedFileName $unpackedPath
+        #Write-Host "Packing $(pacPath)"
+        #$env:PATH = $env:PATH + ";" + "$(pacPath)"
+        #pac canvas pack --sources $unpackedPath --msapp $packedFileName     
      }
      else {
         Write-Host "$packedFileName already exists. Skipping packing of the app."
