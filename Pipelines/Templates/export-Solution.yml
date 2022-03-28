@@ -42,7 +42,9 @@ parameters:
   type: string
   default: ''
 steps:
-
+- template: set-spn-token.yml
+  parameters:
+    serviceConnection: '$(ServiceConnection)'
 # Set pipeline vars for tools paths.
 - template: set-tools-paths.yml
 
@@ -248,17 +250,19 @@ steps:
 - template: update-deployment-settings.yml
   parameters:
     orgUrl: '$(System.TeamFoundationCollectionUri)'
-    project: '${{parameters.project}}'
+    projectName: '${{parameters.project}}'
     repo: '${{parameters.repo}}'
     serviceConnection: '${{parameters.serviceConnection}}'
     solutionName: '${{parameters.solutionName}}'
-    profileId: '$(EnvironmentName)'
+    profileEnvironmentUrl: '$(EnvironmentName)'
+    profileId: '$(BuildDefinitionId)'
     configurationData: '${{parameters.configurationData}}'
     generateEnvironmentVariables: $(DeploymentSettings.GenerateEnvironmentVariables)
     generateConnectionReferences: $(DeploymentSettings.GenerateConnectionReferences)
     generateOwnershipConfig: $(DeploymentSettings.GenerateFlowOwnership)
     generateCanvasSharingConfig: $(DeploymentSettings.GenerateCanvasAppSharing)
     generateAADGroupTeamConfig: $(DeploymentSettings.GenerateAADGroupTeam)
+    generateCustomConnectorConfig: $(DeploymentSettings.GenerateCustomConnectorConfig)
     overwriteExisting: $(DeploymentSettings.OverwriteExistingFiles)
 
 # Set paths to deployment settings

@@ -38,10 +38,12 @@ steps:
     # See https://docs.microsoft.com/en-us/dynamics365/customer-engagement/web-api/solutioncomponent?view=dynamics-ce-odata-9
     # ...for solutionComponentType values 29=Workflow (including Flow), 300=Canvas App, etc 
     foreach ($ownershipConfig in $config){
+      Write-Host "Owner Config: $ownershipConfig.ownerEmail - $ownershipConfig.solutionComponentUniqueName"
       if($ownershipConfig.ownerEmail -ne '' -and $ownershipConfig.solutionComponentType -ne '' -and $ownershipConfig.solutionComponentUniqueName -ne ''){
           switch ($ownershipConfig.solutionComponentType){
             # Workflow 
             29 {  
+                Write-Host "Retrieving Workflow Record"
                 $workflow = Get-CrmRecord -conn $conn -EntityLogicalName workflow -Id $ownershipConfig.solutionComponentUniqueName -Fields clientdata,category,statecode
             } 
             default {
@@ -49,6 +51,7 @@ steps:
               exit 1;
             }      
           }
+          Write-Host "Retrieving User Record"
           $systemuserResult = Get-CrmRecords -conn $conn -EntityLogicalName systemuser -FilterAttribute "domainname" -FilterOperator "eq" -FilterValue $ownershipConfig.ownerEmail -Fields systemuserid
           $workflowDeactivated = $false
           if($systemuserResult.Count -gt 0) {
@@ -59,10 +62,13 @@ steps:
 
               if('${{parameters.updateComponentOnwership}}' -ne "false") {
                 #Need to deactivate the flow before setting ownership if currently active
+                Write-Host "StateCode Property $workflow.statecode_Property.Value"
                 if($workflow.statecode_Property.Value -ne 0){
+                    Write-Host "Deactivating the Flow"
                     Set-CrmRecordState -conn $impersonationConn -EntityLogicalName workflow -Id $ownershipConfig.solutionComponentUniqueName -StateCode 0 -StatusCode 1
                     $workflowDeactivated = $true
                 }
+                Write-Host "Updating Record Owner"
                 Set-CrmRecordOwner -conn $conn $workflow $systemUserId
               }
           }
