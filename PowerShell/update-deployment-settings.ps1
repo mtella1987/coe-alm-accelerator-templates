@@ -1,4 +1,4 @@
-﻿function Set-DeploymentSettingsConfiguration($buildSourceDirectory, $buildRepositoryName, $cdsBaseConnectionString, $xrmDataPowerShellVersion, $microsoftXrmDataPowerShellModule, $orgUrl, $projectId, $projectName, $repo, $azdoAuthType, $accessToken, $serviceConnection, $solutionName, $profileEnvironmentUrl, $profileId, $configurationDataJson, $generateEnvironmentVariables, $generateConnectionReferences, $generateOwnershipConfig, $generateCanvasSharingConfig, $generateAADGroupTeamConfig, $generateCustomConnectorConfig, $overwriteExisting)
+﻿function Set-DeploymentSettingsConfiguration($buildSourceDirectory, $buildRepositoryName, $cdsBaseConnectionString, $xrmDataPowerShellVersion, $microsoftXrmDataPowerShellModule, $orgUrl, $projectId, $projectName, $repo, $azdoAuthType, $serviceConnection, $solutionName, $profileEnvironmentUrl, $profileId, $configurationDataJson, $generateEnvironmentVariables, $generateConnectionReferences, $generateOwnershipConfig, $generateCanvasSharingConfig, $generateAADGroupTeamConfig, $generateCustomConnectorConfig, $overwriteExisting)
 {
     Write-Host (ConvertTo-Json -Depth 10 $configurationDataJson)
     #Generate Deployment Settings
@@ -280,12 +280,12 @@
             Set-EnvironmentDeploymentSettingsConfiguration $buildSourceDirectory $repo $solutionName $newCustomConfiguration $newConfigurationData
         }
         #Update / Create Deployment Pipelines
-        New-DeploymentPipelines "$buildRepositoryName" "$orgUrl" "$projectName" "$repo" "$azdoAuthType" "$accessToken" $settingsConn "$solutionName" "$profileId"
+        New-DeploymentPipelines "$buildRepositoryName" "$orgUrl" "$projectName" "$repo" "$azdoAuthType" $settingsConn "$solutionName" "$profileId"
 
         $buildDefinitionResourceUrl = "$orgUrl$projectId/_apis/build/definitions?name=deploy-*-$solutionName&includeAllProperties=true&api-version=6.0"
 
         $fullBuildDefinitionResponse = Invoke-RestMethod $buildDefinitionResourceUrl -Method Get -Headers @{
-            Authorization = "$azdoAuthType $accessToken"
+            Authorization = "$azdoAuthType  $env:SYSTEM_ACCESSTOKEN"
         }
         $buildDefinitionResponseResults = $fullBuildDefinitionResponse.value
 
@@ -326,12 +326,12 @@
                 }
             }
 
-            Set-BuildDefinitionVariables $orgUrl $projectId $azdoAuthType $accessToken $buildDefinitionResult $definitionId $newBuildDefinitionVariables
+            Set-BuildDefinitionVariables $orgUrl $projectId $azdoAuthType $buildDefinitionResult $definitionId $newBuildDefinitionVariables
         }
     }
 }
 
-function New-DeploymentPipelines($buildRepositoryName, $orgUrl, $projectName, $repo, $azdoAuthType, $accessToken, $settingsConn, $solutionName, $profileId)
+function New-DeploymentPipelines($buildRepositoryName, $orgUrl, $projectName, $repo, $azdoAuthType, $settingsConn, $solutionName, $profileId)
 {
     if($null -ne $profileId) {
         $deploymentSteps = Get-CrmRecords -conn $settingsConn -EntityLogicalName cat_deploymentstep -FilterAttribute "cat_deploymentprofileid" -FilterOperator "eq" -FilterValue $profileId -Fields cat_deploymentenvironmentid,cat_name
@@ -339,7 +339,7 @@ function New-DeploymentPipelines($buildRepositoryName, $orgUrl, $projectName, $r
         #Update / Create Deployment Pipelines
         $buildDefinitionResourceUrl = "$orgUrl$projectId/_apis/build/definitions?name=deploy-*-$solutionName&includeAllProperties=true&api-version=6.0"
         $fullBuildDefinitionResponse = Invoke-RestMethod $buildDefinitionResourceUrl -Method Get -Headers @{
-            Authorization = "$azdoAuthType $accessToken"
+            Authorization = "$azdoAuthType  $env:SYSTEM_ACCESSTOKEN"
         }
         $buildDefinitionResponseResults = $fullBuildDefinitionResponse.value
         if($buildDefinitionResponseResults.length -lt $deploymentSteps.Count) {
@@ -366,19 +366,19 @@ function New-DeploymentPipelines($buildRepositoryName, $orgUrl, $projectName, $r
                 }
             }
             if(-Not [string]::IsNullOrWhiteSpace($environments)) {
-                coe alm branch --pipelineRepository $buildRepositoryName -o $orgUrl -p "$projectName" -r "$repo" -d "$solutionName" -a $accessToken -s $environments
+                coe alm branch --pipelineRepository $buildRepositoryName -o $orgUrl -p "$projectName" -r "$repo" -d "$solutionName" -a  $env:SYSTEM_ACCESSTOKEN -s $environments
             }
 
             Set-Location $currentPath
         }
     }
 }
-function Set-BuildDefinitionVariables($orgUrl, $projectId, $azdoAuthType, $accessToken, $buildDefinitionResult, $definitionId, $newBuildDefinitionVariables) {
+function Set-BuildDefinitionVariables($orgUrl, $projectId, $azdoAuthType, $buildDefinitionResult, $definitionId, $newBuildDefinitionVariables) {
     #Set the build definition variables to the newly created list
     $buildDefinitionResult.variables = $newBuildDefinitionVariables
     $buildDefinitionResourceUrl = "$orgUrl$projectId/_apis/build/definitions/" + $definitionId + "?api-version=6.0"
     $headers = New-Object "System.Collections.Generic.Dictionary[[String],[String]]"
-    $headers.Add("Authorization", "$azdoAuthType $accessToken")
+    $headers.Add("Authorization", "$azdoAuthType  $env:SYSTEM_ACCESSTOKEN")
     $headers.Add("Content-Type", "application/json")
     $body = ConvertTo-Json -Depth 10 $buildDefinitionResult
     #remove tab charcters from the body
@@ -438,7 +438,8 @@ function Invoke-DeploymentSettingsConfiguration-Test()
     Install-Module $testConfig.microsoftXrmDataPowerShellModule -RequiredVersion $testConfig.xrmDataPowerShellVersion
     $pat = $testConfig.accessToken
     $token = [System.Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes(":$($pat)"))
+    $env:SYSTEM_ACCESSTOKEN = $token
     $configurationDataJson = $testConfig.configurationDataJson
-    Set-DeploymentSettingsConfiguration $testConfig.buildSourceDirectory $testConfig.buildRepositoryName $testConfig.cdsBaseConnectionString $testConfig.xrmDataPowerShellVersion $testConfig.microsoftXrmDataPowerShellModule $testConfig.orgUrl $testConfig.projectId $testConfig.projectName $testConfig.repo "Bearer" $token $testConfig.serviceConnection $testConfig.solutionName $testConfig.profileEnvironmentUrl $testConfig.profileId $configurationDataJson $testConfig.generateEnvironmentVariables $testConfig.generateConnectionReferences $testConfig.generateOwnershipConfig $testConfig.generateCanvasSharingConfig $testConfig.generateAADGroupTeamConfig $testConfig.generateCustomConnectorConfig $testConfig.overwriteExisting
+    Set-DeploymentSettingsConfiguration $testConfig.buildSourceDirectory $testConfig.buildRepositoryName $testConfig.cdsBaseConnectionString $testConfig.xrmDataPowerShellVersion $testConfig.microsoftXrmDataPowerShellModule $testConfig.orgUrl $testConfig.projectId $testConfig.projectName $testConfig.repo "Basic" $testConfig.serviceConnection $testConfig.solutionName $testConfig.profileEnvironmentUrl $testConfig.profileId $configurationDataJson $testConfig.generateEnvironmentVariables $testConfig.generateConnectionReferences $testConfig.generateOwnershipConfig $testConfig.generateCanvasSharingConfig $testConfig.generateAADGroupTeamConfig $testConfig.generateCustomConnectorConfig $testConfig.overwriteExisting
 }
 #Invoke-DeploymentSettingsConfiguration-Test
