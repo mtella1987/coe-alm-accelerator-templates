@@ -23,6 +23,9 @@ steps:
     Import-Module $microsoftXrmDataPowerShellModule -Force -RequiredVersion $(XrmDataPowerShellVersion) -ArgumentList @{ NonInteractive = $true }
     $conn = Get-CrmConnection -ConnectionString "$(CdsBaseConnectionString)${{parameters.serviceConnection}}"
 
+    $activationConfig = ConvertFrom-Json '$(outActivateFlows.outActivateFlows)'
+    $activationConfig | Sort-Object [int]sortOrder
+
     # json config value must follow this format
     #[
     #    {
@@ -41,7 +44,7 @@ steps:
     # This should be an ordered list of flows that must be turned on before any other dependent (parent) flows can be turned on.
     # The remaining flows will be turned by the next following 'Enable flows based on connection references' task
     foreach ($activateConfig in $config){
-        if($activateConfig.activateAsUser -ne '' -and $activateConfig.solutionComponentUniqueName -ne ''){
+        if($activateConfig.activateAsUser -ne '' -and $activateConfig.solutionComponentUniqueName -ne '' -and $activateConfig.activate -ne 'false'){
             $workflow = Get-CrmRecord -conn $conn -EntityLogicalName workflow -Id $activateConfig.solutionComponentUniqueName -Fields clientdata,category,statecode
             $systemuserResult = Get-CrmRecords -conn $conn -EntityLogicalName systemuser -FilterAttribute "domainname" -FilterOperator "eq" -FilterValue $activateConfig.activateAsUser -Fields systemuserid
             if($systemuserResult.Count -gt 0) {
@@ -52,7 +55,7 @@ steps:
                     $impersonationConn = Get-CrmConnection -ConnectionString "$(CdsBaseConnectionString)${{parameters.serviceConnection}}"
                     $impersonationCallerId = $systemUserId
                     $impersonationConn.OrganizationWebProxyClient.CallerId = $impersonationCallerId 
-                    Write-Host "Enabling Flows"
+                    Write-Host "Activating Flow: " $activateConfig.solutionComponentName
                     Set-CrmRecordState -conn $impersonationConn -EntityLogicalName workflow -Id $activateConfig.solutionComponentUniqueName -StateCode 1 -StatusCode 2
                 }
             }
@@ -95,6 +98,13 @@ steps:
             $solutionComponents = $result.CrmRecords
 
             $config = ConvertFrom-Json '${{parameters.connectionReferences}}'
+
+            # Retrieve the activation config to use when activating flows for connection references
+            $activationConfigs = ConvertFrom-Json '$(outActivateFlows.outActivateFlows)'
+            $activationConfigs | Sort-Object [int]sortOrder
+
+            $flowsToActivate = [System.Collections.ArrayList]@()
+
             foreach ($connectionRefConfig in $config) {
                 if($connectionRefConfig.LogicalName -ne '' -and $connectionRefConfig.ConnectionId -ne '') {
                     # Get the connection reference to update
@@ -132,10 +142,21 @@ steps:
                                 foreach ($solutionComponent in $solutionComponents){
                                     if ($solutionComponent.componenttype -eq "Workflow"){
                                         $workflow = Get-CrmRecord -conn $conn -EntityLogicalName workflow -Id $solutionComponent.objectid -Fields clientdata,category,statecode
+
                                         if($workflow -ne $null -and $workflow.clientdata -ne $null -and $workflow.clientdata.Contains($connectionRefConfig.LogicalName) -and $workflow.statecode_Property.Value -ne 1){
-                                            Write-Host "Enabling Flows"
-                                            $impersonationConn.OrganizationWebProxyClient.CallerId = $impersonationCallerId 
-                                            Set-CrmRecordState -conn $impersonationConn -EntityLogicalName workflow -Id $solutionComponent.objectid -StateCode 1 -StatusCode 2
+                                            Write-Host "Retrieving activation config"
+                                            $activationConfig = $activationConfigs | Where-Object { $_.solutionComponentUniqueName -eq $solutionComponent.objectid } | Select-Object -First 1
+                                            if($null -ne $activationConfig -and $activationConfig.activate -ne 'false') {
+                                                Write-Host "Adding flow " $activationConfig.solutionComponentName " to activation collection"
+                                                $flowActivation = [PSCustomObject]@{}
+                                                $flowActivation | Add-Member -MemberType NoteProperty -Name 'solutionComponent' -Value $workflow
+                                                $flowActivation | Add-Member -MemberType NoteProperty -Name 'impersonationCallerId' -Value $impersonationCallerId
+                                                $flowActivation | Add-Member -MemberType NoteProperty -Name 'sortOrder' -Value $activationConfig.sortOrder
+                                                $flowsToActivate.Add($flowActivation)
+                                            }
+                                            else {
+                                                Write-Host "Excluding flow " $activationConfig.solutionComponentName "from activation collection"
+                                            }
                                         }
                                     }
                                 }
@@ -150,6 +171,13 @@ steps:
                     }
 
                 }
+            }
+            #Activate any flows added to the collection based on sort order
+            $flowsToActivate | Sort-Object [int]sortOrder
+            foreach($flowToActivate in $flowsToActivate) {
+                Write-Host "Activating Flow: " $flowToActivate.solutionComponent.name
+                $impersonationConn.OrganizationWebProxyClient.CallerId = $flowToActivate.impersonationCallerId 
+                Set-CrmRecordState -conn $impersonationConn -EntityLogicalName workflow -Id $flowToActivate.solutionComponent.workflowid -StateCode 1 -StatusCode 2
             }
         }
     }

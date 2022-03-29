@@ -34,17 +34,17 @@ steps:
   condition: and(succeeded(), ne('${{parameters.buildType}}', 'Unmanaged'))
     
 # Before we committed changes, we formatted all json files for readability in source control.  This breaks solution package, so we need to flatten them before packing   
-- pwsh: |
+#- pwsh: |
     #When we unpack the solution files, we format the json, but it causes solution import failures so we need to flatten the files
-    Get-ChildItem -Path "$(Build.SourcesDirectory)\$(RepoName)\$(SolutionName)" -Recurse -Filter *.json |
-    ForEach-Object {
-        $fileContent = (Get-Content $_.FullName) -join ' '
-        if(-not [string]::IsNullOrWhiteSpace($fileContent)) {
-            Set-Content $_.FullName $fileContent
-        }
-    }
-  displayName: 'Flatten JSON files'
-  enabled: true
+#    Get-ChildItem -Path "$(Build.SourcesDirectory)\$(RepoName)\$(SolutionName)" -Recurse -Filter *.json |
+#    ForEach-Object {
+#        $fileContent = (Get-Content $_.FullName) -join ' '
+#        if(-not [string]::IsNullOrWhiteSpace($fileContent)) {
+#            Set-Content $_.FullName $fileContent
+#        }
+#    }
+#  displayName: 'Flatten JSON files'
+#  enabled: true
 
 - powershell: |
     $manifestVersion = ''
@@ -157,4 +157,4 @@ steps:
     PowerPlatformSPN: '$(ServiceConnection)'
     FilesToAnalyze: '$(Build.ArtifactStagingDirectory)\$(SolutionName)_$(Build.BuildNumber).zip'
     RuleSet: '0ad12346-e108-40b8-a956-9a8f95ea18c9'
-  condition: and(succeeded(), and(ne(variables['DisableSolutionChecker'], 'true'), eq(variables['Build.Reason'], 'PullRequest')))
+  condition: and(succeeded(), eq(variables['Build.Reason'], 'PullRequest'))

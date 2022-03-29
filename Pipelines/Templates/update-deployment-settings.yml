@@ -21,7 +21,7 @@ parameters:
 - name: generateConnectionReferences
   type: string
   default: 'true'
-- name: generateOwnershipConfig
+- name: generateFlowConfig
   type: string
   default: 'true'
 - name: generateCanvasSharingConfig
@@ -31,9 +31,6 @@ parameters:
   type: string
   default: 'false'
 - name: generateCustomConnectorConfig
-  type: string
-  default: 'false'
-- name: overwriteExisting
   type: string
   default: 'false'
 

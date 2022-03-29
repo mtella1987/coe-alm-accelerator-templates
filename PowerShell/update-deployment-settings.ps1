@@ -1,4 +1,4 @@
-﻿function Set-DeploymentSettingsConfiguration($buildSourceDirectory, $buildRepositoryName, $cdsBaseConnectionString, $xrmDataPowerShellVersion, $microsoftXrmDataPowerShellModule, $orgUrl, $projectId, $projectName, $repo, $azdoAuthType, $serviceConnection, $solutionName, $profileEnvironmentUrl, $profileId, $configurationDataJson, $generateEnvironmentVariables, $generateConnectionReferences, $generateOwnershipConfig, $generateCanvasSharingConfig, $generateAADGroupTeamConfig, $generateCustomConnectorConfig, $overwriteExisting)
+﻿function Set-DeploymentSettingsConfiguration($buildSourceDirectory, $buildRepositoryName, $cdsBaseConnectionString, $xrmDataPowerShellVersion, $microsoftXrmDataPowerShellModule, $orgUrl, $projectId, $projectName, $repo, $azdoAuthType, $serviceConnection, $solutionName, $profileEnvironmentUrl, $profileId, $configurationDataJson, $generateEnvironmentVariables, $generateConnectionReferences, $generateFlowConfig, $generateCanvasSharingConfig, $generateAADGroupTeamConfig, $generateCustomConnectorConfig)
 {
     Write-Host (ConvertTo-Json -Depth 10 $configurationDataJson)
     #Generate Deployment Settings
@@ -22,229 +22,9 @@
         $customConnectorSharings = [System.Collections.ArrayList]@()
         $flowOwnerships = [System.Collections.ArrayList]@()
         $flowActivationUsers = [System.Collections.ArrayList]@()
-        $flowActivations = [System.Collections.ArrayList]@()
-        $flowActivationSortings = [System.Collections.ArrayList]@()
         $flowSharings = [System.Collections.ArrayList]@()
         $groupTeams = [System.Collections.ArrayList]@()
         $cofigurationVariables = [System.Collections.ArrayList]@()
-
-        $currentCustomConfiguration = [PSCustomObject]@{}
-        $currentConfiguration = [PSCustomObject]@{}
-        if("$overwriteExisting" -ne "true") {
-            if(Test-Path $customDeploymentSettingsFilePath) {
-                $existingCustomDeploymentSettings = Get-Content $customDeploymentSettingsFilePath -Raw
-                if(-Not [string]::IsNullOrWhiteSpace($existingCustomDeploymentSettings)) {
-                    $currentCustomConfiguration = ConvertFrom-Json $existingCustomDeploymentSettings
-                }
-            }
-
-            if(Test-Path $deploymentSettingsFilePath) {
-                $existingDeploymentSettings = Get-Content $deploymentSettingsFilePath -Raw
-                if(-Not [string]::IsNullOrWhiteSpace($existingDeploymentSettings)) {
-                    $currentConfiguration = ConvertFrom-Json $existingDeploymentSettings
-                }
-            }
-        }
-        Write-Host "Retrieving existing deployment configuration..."
-        $currentConnectionReferences = $currentConfiguration.ConnectionReferences
-        $currentEnvironmentVariables = $currentConfiguration.EnvironmentVariables
-        $currentCanvasApps = $currentCustomConfiguration.AadGroupCanvasConfiguration
-        $currentCustomConnectors = $currentCustomConfiguration.ConnectorShareWithGroupTeamConfiguration
-        $currentFlows = $currentCustomConfiguration.SolutionComponentOwnershipConfiguration
-        $currentFlowActivationUsers = $currentCustomConfiguration.ActivateFlowConfiguration
-        $currentFlowSharings = $currentCustomConfiguration.FlowShareWithGroupTeamConfiguration
-        $currentFlowActivationSortings = $currentCustomConfiguration.FlowActivationOrderConfiguration
-        $currentFlowActivations = $currentCustomConfiguration.FlowActivationConfiguration
-    
-        $solutionComponentDefinitionsResults =  Get-CrmRecords -conn $conn -EntityLogicalName solutioncomponentdefinition -FilterAttribute "primaryentityname" -FilterOperator "eq" -FilterValue "connectionreference" -Fields objecttypecode
-        #There are extra characters being introduced in specific locales. The regex replace on the objecttypecode below is to remove it.
-        $connectionReferenceTypeCode = [int] ($solutionComponentDefinitionsResults.CrmRecords[0].objecttypecode -replace '\D','')
-    
-        Write-Host "Creating deployment configuration for solution components..."
-        foreach($solutioncomponent in $solutionComponentResults.CrmRecords)
-        {
-            #Connection Reference
-            #There are extra characters being introduced in specific locales for the componenttype. The regex replace on the componenttype below is to remove it.
-            $solutioncomponentType = [int] ($solutioncomponent.componenttype_Property.Value.Value -replace '\D','')
-            if(($solutioncomponentType -eq $connectionReferenceTypeCode) -and ("$generateConnectionReferences" -ne "false")) {
-                # "ConnectionReferences": [
-                # {
-                #    "LogicalName": "cat_CDS_Current",
-                #    "ConnectionId": "#{stage.cr.cat_CDS_Current}#",
-                #    "ConnectorId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps"
-                # }
-                #]
-                $connRefResult = Get-CrmRecord -conn $conn -EntityLogicalName connectionreference -Id $solutionComponent.objectid -Fields connectionreferencelogicalname, connectorid
-                $connRef = $null
-                $connRefName = $connRefResult.connectionreferencelogicalname
-                $connectorId = $connRefResult.connectorid
-                $currentConnectionReferences | Foreach-Object { if($_.LogicalName -eq $connRefName) { $connRef = $_ } }
-                $connnectionConfigVariable = "#{connectionreference." + $connRefName + "}#"
-                $connnectionOwnerConfigVariable = "#{connectionreference.user." + $connRefName + "}#"
-                if($null -eq $connRef) {
-                    $connRef = [PSCustomObject]@{"LogicalName"="$connRefName"; "ConnectionId"="$connnectionConfigVariable"; "ConnectorId"= "$connectorId"; "ConnectionOwner"="$connnectionOwnerConfigVariable" }
-                }
-                $cofigurationVariables.Add($connnectionConfigVariable)
-                $cofigurationVariables.Add($connnectionOwnerConfigVariable)
-                $connectionReferences.Add($connRef)
-            }
-            #Custom Connector Variable Definition
-            elseif($solutioncomponent.componenttype_Property.Value.Value -eq 372 -and "$generateCustomConnectorConfig" -ne "false") {
-                  #"ConnectorShareWithGroupTeamConfiguration": [
-                  #{
-                  #  "connectorId": "b464e249-0bf7-48c0-8350-24476349bac1",
-                  #  "aadGroupTeamName": "#{connectorshare.b464e249-0bf7-48c0-8350-24476349bac1}#"
-                  #}
-                #]
-                $connectorResult =  Get-CrmRecord -conn $conn -EntityLogicalName connector -Id $solutionComponent.objectid -Fields displayname
-                $connectorSharingConfig = $null
-                $placeholdername = $connectorResult.displayname.replace(' ','') + '.' + $solutionComponent.objectid
-                $currentCustomConnectors | Foreach-Object { if($_.solutionComponentUniqueName -eq $workflowName) { $connectorSharingConfig = $_ } }
-                #Create the flow sharing deployment settings
-                $sharingConfigVariable = "#{connector.teamname." + $placeholdername + "}#"
-                if($null -eq $connectorSharingConfig) {
-                    $connectorSharingConfig = [PSCustomObject]@{"solutionComponentName"=$connectorResult.name; "solutionComponentUniqueName"=$solutionComponent.objectid; "aadGroupTeamName"="$sharingConfigVariable"}
-                }
-                $cofigurationVariables.Add($sharingConfigVariable)
-                $customConnectorSharings.Add($connectorSharingConfig)
-            }
-
-            #Environment Variable Definition
-            elseif($solutioncomponent.componenttype_Property.Value.Value -eq 380 -and "$generateEnvironmentVariables" -ne "false") {
-                  #"EnvironmentVariables": [
-                  #{
-                  #  "SchemaName": "cat_ConnectorBaseUrl",
-                  #  "Value": "#{environmentvariable.cat_ConnectorBaseUrl}#"
-                  #},
-                  #{
-                  #  "SchemaName": "cat_ConnectorHostUrl",
-                  #  "Value": "#{environmentvariable.cat_ConnectorHostUrl}#"
-                  #}
-                #]
-                $envVarResult =  Get-CrmRecord -conn $conn -EntityLogicalName environmentvariabledefinition -Id $solutionComponent.objectid -Fields schemaname
-                $envVar = $null
-                $envVarName = $envVarResult.schemaname
-
-                $currentEnvironmentVariables | Foreach-Object { if($_.SchemaName -eq $envVarName) { $envVar = $_ } }
-                $envVarConfigVariable = "#{environmentvariable." + $envVarName + "}#"
-                if($null -eq $envVar) {
-                    $envVar = [PSCustomObject]@{"SchemaName"="$envVarName"; "Value"="$envVarConfigVariable" }
-                }
-                $cofigurationVariables.Add($envVarConfigVariable)
-                $environmentVariables.Add($envVar)
-            }
-            #Canvas App
-            elseif($solutioncomponent.componenttype_Property.Value.Value -eq 300 -and "$generateCanvasSharingConfig" -ne "false") {
-                #"AadGroupCanvasConfiguration": [
-                # {
-                #    "aadGroupId": "#{canvasshare.aadGroupId}#",
-                #    "canvasNameInSolution": "cat_devopskitsamplecanvasapp_c7ec5",
-                #    "canvasDisplayName": "cat_devopskitsamplecanvasapp_c7ec5",
-                #    "roleName": "#{canvasshare.roleName}#"
-                # }
-                #]
-                $canvasAppResult =  Get-CrmRecord -conn $conn -EntityLogicalName canvasapp -Id $solutionComponent.objectid -Fields solutionid, name, displayname
-                $canvasConfig = $null
-                $canvasName = $canvasAppResult.name
-                $currentCanvasApps | Foreach-Object { if($_.canvasNameInSolution -eq $canvasName) { $canvasConfig = $_ } }
-                $aadGroupConfigVariable = "#{canvasshare.aadGroupId." + $canvasName + "}#"
-                $groupRoleConfigVariable = "#{canvasshare.roleName." + $canvasName + "}#"
-                if($null -eq $canvasConfig) {
-                    $canvasConfig = [PSCustomObject]@{"aadGroupId"="$aadGroupConfigVariable"; "canvasNameInSolution"=$canvasName; "canvasDisplayName"= $canvasAppResult.displayname; "roleName"="$groupRoleConfigVariable"}
-                }
-                $cofigurationVariables.Add($aadGroupConfigVariable)
-                $cofigurationVariables.Add($groupRoleConfigVariable)
-                $canvasApps.Add($canvasConfig)
-            }
-            #Workflow
-            elseif($solutioncomponent.componenttype_Property.Value.Value -eq 29 -and "$generateOwnershipConfig" -ne "false") {
-                #"SolutionComponentOwnershipConfiguration": [
-                #{
-                #  "solutionComponentType": 29,
-                #  "solutionComponentUniqueName": "71cc728c-2487-eb11-a812-000d3a8fe6a3",
-                #  "solutionComponentName": My Flow,
-                #  "ownerEmail": "#{owner.ownerEmail}#"
-                #},
-                #{
-                #  "solutionComponentType": 29,
-                #  "solutionComponentUniqueName": "d2f7f0e2-a1a9-eb11-b1ac-000d3a53c3c2",
-                #  "solutionComponentName": My Other Flow,
-                #  "ownerEmail": "#{owner.ownerEmail}#"
-                #}
-                #]
-                $flowResult =  Get-CrmRecord -conn $conn -EntityLogicalName workflow -Id $solutionComponent.objectid -Fields solutionid, name
-                $flowConfig = $null
-                $flowActivationUserConfig = $null
-                $flowSharingConfig = $null
-                $flowActivationConfig = $null
-                $flowActivationSortingConfig = $null
-                $workflowName = $solutionComponent.objectid
-                $placeholdername = $flowResult.name.replace(' ','') + '.' + $solutionComponent.objectid
-                $currentFlows | Foreach-Object { if($_.solutionComponentUniqueName -eq $workflowName) { $flowConfig = $_ } }
-                $currentFlowActivationUsers | Foreach-Object { if($_.solutionComponentUniqueName -eq $workflowName) { $flowActivationUserConfig = $_ } }
-                $currentFlowSharings | Foreach-Object { if($_.solutionComponentUniqueName -eq $workflowName) { $flowSharingConfig = $_ } }
-                $currentFlowActivations | Foreach-Object { if($_.solutionComponentUniqueName -eq $workflowName) { $flowActivationConfig = $_ } }
-                $currentFlowActivationSortings | Foreach-Object { if($_.solutionComponentUniqueName -eq $workflowName) { $flowActivationSortingConfig = $_ } }
-                $ownerConfigVariable = "#{owner.ownerEmail." + $placeholdername + "}#"
-                #Create the flow owner deployment settings
-                if($null -eq $flowConfig) {
-                    $flowConfig = [PSCustomObject]@{"solutionComponentType"=$solutioncomponent.componenttype_Property.Value.Value; "solutionComponentName"=$flowResult.name; "solutionComponentUniqueName"=$workflowName; "ownerEmail"="$ownerConfigVariable"}
-                }
-                $cofigurationVariables.Add($ownerConfigVariable)
-                $flowOwnerships.Add($flowConfig)
-
-                #Create the flow sharing deployment settings
-                $sharingConfigVariable = "#{flow.sharing." + $placeholdername + "}#"
-                if($null -eq $flowSharingConfig) {
-                    $flowSharingConfig = [PSCustomObject]@{"solutionComponentName"=$flowResult.name; "solutionComponentUniqueName"=$workflowName; "aadGroupTeamName"="$sharingConfigVariable"}
-                }
-                $cofigurationVariables.Add($sharingConfigVariable)
-                $flowSharings.Add($flowSharingConfig)
-
-                #Create the flow activation user deployment settings
-                $activateUserConfigVariable = "#{activateflow.activateas." + $placeholdername + "}#"
-                if($null -eq $flowActivationUserConfig) {
-                    $flowActivationUserConfig = [PSCustomObject]@{"solutionComponentName"=$flowResult.name; "solutionComponentUniqueName"=$workflowName; "activateAsUser"="$activateUserConfigVariable"}
-                }
-                $cofigurationVariables.Add($activateUserConfigVariable)
-                $flowActivationUsers.Add($flowActivationUserConfig)
-
-                #Create the flow activation sorting deployment settings
-                $sortOrderConfigVariable = "#{activateflow.order." + $placeholdername + "}#"
-                if($null -eq $flowActivationSortingConfig) {
-                    $flowActivationSortingConfig = [PSCustomObject]@{"solutionComponentName"=$flowResult.name; "solutionComponentUniqueName"=$workflowName; "sortOrder"="$sortOrderConfigVariable"}
-                }
-                $cofigurationVariables.Add($sortOrderConfigVariable)
-                $flowActivationSortings.Add($flowActivationSortingConfig)
-
-                #Create the flow activation deployment settings
-                $activateConfigVariable = "#{activateflow.activate." + $placeholdername + "}#"
-                if($null -eq $flowActivationConfig) {
-                    $flowActivationConfig = [PSCustomObject]@{"solutionComponentName"=$flowResult.name; "solutionComponentUniqueName"=$workflowName; "activate"="$activateConfigVariable"}
-                }
-                $cofigurationVariables.Add($activateConfigVariable)
-                $flowActivations.Add($flowActivationConfig)
-            }
-        }
-
-        $newConfiguration = [PSCustomObject]@{}
-        $newConfiguration | Add-Member -MemberType NoteProperty -Name 'EnvironmentVariables' -Value $environmentVariables
-        $newConfiguration | Add-Member -MemberType NoteProperty -Name 'ConnectionReferences' -Value $connectionReferences
-
-        $json = ConvertTo-Json -Depth 10 $newConfiguration
-        Set-Content -Path $deploymentSettingsFilePath -Value $json
-
-        $newCustomConfiguration = [PSCustomObject]@{}
-        $newCustomConfiguration | Add-Member -MemberType NoteProperty -Name 'ActivateFlowConfiguration' -Value $flowActivationUsers
-        $newCustomConfiguration | Add-Member -MemberType NoteProperty -Name 'ConnectorShareWithGroupTeamConfiguration' -Value $customConnectorSharings
-        $newCustomConfiguration | Add-Member -MemberType NoteProperty -Name 'SolutionComponentOwnershipConfiguration' -Value $flowOwnerships
-        $newCustomConfiguration | Add-Member -MemberType NoteProperty -Name 'FlowShareWithGroupTeamConfiguration' -Value $flowSharings
-        $newCustomConfiguration | Add-Member -MemberType NoteProperty -Name 'FlowActivationConfiguration' -Value $flowActivations
-        $newCustomConfiguration | Add-Member -MemberType NoteProperty -Name 'FlowActivationOrderConfiguration' -Value $flowActivationSortings
-        $newCustomConfiguration | Add-Member -MemberType NoteProperty -Name 'AadGroupCanvasConfiguration' -Value $canvasApps
-        $newCustomConfiguration | Add-Member -MemberType NoteProperty -Name 'AadGroupTeamConfiguration' -Value $groupTeams
-
-        $settingsConn = Get-CrmConnection -ConnectionString "$cdsBaseConnectionString$profileEnvironmentUrl"
 
         #Convert the updated configuration to json and store in customDeploymentSettings.json
         $json = ConvertTo-Json -Depth 10 $newCustomConfiguration
@@ -254,6 +34,8 @@
         $deploymentConfigurationData = [System.Collections.ArrayList]@()
         #If configuration data was passed in use this to set the pipeline variable values
         $newConfigurationData = [System.Collections.ArrayList]@()
+
+        $settingsConn = Get-CrmConnection -ConnectionString "$cdsBaseConnectionString$profileEnvironmentUrl"
         #The configuration data will point to the records in Dataverse that store the JSON to set pipeline variables. Try/Catch for invalid json
         $configurationData = ConvertFrom-Json $configurationDataJson
 
@@ -276,6 +58,158 @@
             }
         }
 
+        $solutionComponentDefinitionsResults =  Get-CrmRecords -conn $conn -EntityLogicalName solutioncomponentdefinition -FilterAttribute "primaryentityname" -FilterOperator "eq" -FilterValue "connectionreference" -Fields objecttypecode
+        #There are extra characters being introduced in specific locales. The regex replace on the objecttypecode below is to remove it.
+        $connectionReferenceTypeCode = [int] ($solutionComponentDefinitionsResults.CrmRecords[0].objecttypecode -replace '\D','')
+    
+        Write-Host "Creating deployment configuration for solution components..."
+        foreach($solutioncomponent in $solutionComponentResults.CrmRecords)
+        {
+            #Connection Reference
+            #There are extra characters being introduced in specific locales for the componenttype. The regex replace on the componenttype below is to remove it.
+            $solutioncomponentType = [int] ($solutioncomponent.componenttype_Property.Value.Value -replace '\D','')
+            if(($solutioncomponentType -eq $connectionReferenceTypeCode) -and ("$generateConnectionReferences" -ne "false")) {
+                # "ConnectionReferences": [
+                # {
+                #    "LogicalName": "cat_CDS_Current",
+                #    "ConnectionId": "#{stage.cr.cat_CDS_Current}#",
+                #    "ConnectorId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps"
+                # }
+                #]
+                $connRefResult = Get-CrmRecord -conn $conn -EntityLogicalName connectionreference -Id $solutionComponent.objectid -Fields connectionreferencelogicalname, connectorid
+                $connRef = $null
+                $connRefName = $connRefResult.connectionreferencelogicalname
+                $connectorId = $connRefResult.connectorid
+                $connnectionConfigVariable = "#{connectionreference." + $connRefName + "}#"
+                $connnectionOwnerConfigVariable = "#{connectionreference.user." + $connRefName + "}#"
+                $connRef = [PSCustomObject]@{"LogicalName"="$connRefName"; "ConnectionId"="$connnectionConfigVariable"; "ConnectorId"= "$connectorId"; "ConnectionOwner"="$connnectionOwnerConfigVariable" }
+                $cofigurationVariables.Add($connnectionConfigVariable)
+                $cofigurationVariables.Add($connnectionOwnerConfigVariable)
+                $connectionReferences.Add($connRef)
+            }
+            #Custom Connector Variable Definition
+            elseif($solutioncomponent.componenttype_Property.Value.Value -eq 372 -and "$generateCustomConnectorConfig" -ne "false") {
+                  #"ConnectorShareWithGroupTeamConfiguration": [
+                  #{
+                  #  "connectorId": "b464e249-0bf7-48c0-8350-24476349bac1",
+                  #  "aadGroupTeamName": "#{connectorshare.b464e249-0bf7-48c0-8350-24476349bac1}#"
+                  #}
+                #]
+                $connectorResult =  Get-CrmRecord -conn $conn -EntityLogicalName connector -Id $solutionComponent.objectid -Fields displayname
+                $connectorSharingConfig = $null
+                $placeholdername = $connectorResult.displayname.replace(' ','') + '.' + $solutionComponent.objectid
+                #Create the flow sharing deployment settings
+                $sharingConfigVariable = "#{connector.teamname." + $placeholdername + "}#"
+                $connectorSharingConfig = [PSCustomObject]@{"solutionComponentName"=$connectorResult.name; "solutionComponentUniqueName"=$solutionComponent.objectid; "aadGroupTeamName"="$sharingConfigVariable"}
+                $cofigurationVariables.Add($sharingConfigVariable)
+                $customConnectorSharings.Add($connectorSharingConfig)
+            }
+
+            #Environment Variable Definition
+            elseif($solutioncomponent.componenttype_Property.Value.Value -eq 380 -and "$generateEnvironmentVariables" -ne "false") {
+                  #"EnvironmentVariables": [
+                  #{
+                  #  "SchemaName": "cat_ConnectorBaseUrl",
+                  #  "Value": "#{environmentvariable.cat_ConnectorBaseUrl}#"
+                  #},
+                  #{
+                  #  "SchemaName": "cat_ConnectorHostUrl",
+                  #  "Value": "#{environmentvariable.cat_ConnectorHostUrl}#"
+                  #}
+                #]
+                $envVarResult =  Get-CrmRecord -conn $conn -EntityLogicalName environmentvariabledefinition -Id $solutionComponent.objectid -Fields schemaname
+                $envVar = $null
+                $envVarName = $envVarResult.schemaname
+
+                $envVarConfigVariable = "#{environmentvariable." + $envVarName + "}#"
+                $envVar = [PSCustomObject]@{"SchemaName"="$envVarName"; "Value"="$envVarConfigVariable" }
+                $cofigurationVariables.Add($envVarConfigVariable)
+                $environmentVariables.Add($envVar)
+            }
+            #Canvas App
+            elseif($solutioncomponent.componenttype_Property.Value.Value -eq 300 -and "$generateCanvasSharingConfig" -ne "false") {
+                #"AadGroupCanvasConfiguration": [
+                # {
+                #    "aadGroupId": "#{canvasshare.aadGroupId}#",
+                #    "canvasNameInSolution": "cat_devopskitsamplecanvasapp_c7ec5",
+                #    "canvasDisplayName": "cat_devopskitsamplecanvasapp_c7ec5",
+                #    "roleName": "#{canvasshare.roleName}#"
+                # }
+                #]
+                $canvasAppResult =  Get-CrmRecord -conn $conn -EntityLogicalName canvasapp -Id $solutionComponent.objectid -Fields solutionid, name, displayname
+                $canvasConfig = $null
+                $canvasName = $canvasAppResult.name
+                $aadGroupConfigVariable = "#{canvasshare.aadGroupId." + $canvasName + "}#"
+                $groupRoleConfigVariable = "#{canvasshare.roleName." + $canvasName + "}#"
+                $canvasConfig = [PSCustomObject]@{"aadGroupId"="$aadGroupConfigVariable"; "canvasNameInSolution"=$canvasName; "canvasDisplayName"= $canvasAppResult.displayname; "roleName"="$groupRoleConfigVariable"}
+                $cofigurationVariables.Add($aadGroupConfigVariable)
+                $cofigurationVariables.Add($groupRoleConfigVariable)
+                $canvasApps.Add($canvasConfig)
+            }
+            #Workflow
+            elseif($solutioncomponent.componenttype_Property.Value.Value -eq 29 -and "$generateFlowConfig" -ne "false") {
+                #"SolutionComponentOwnershipConfiguration": [
+                #{
+                #  "solutionComponentType": 29,
+                #  "solutionComponentUniqueName": "71cc728c-2487-eb11-a812-000d3a8fe6a3",
+                #  "solutionComponentName": My Flow,
+                #  "ownerEmail": "#{owner.ownerEmail}#"
+                #},
+                #{
+                #  "solutionComponentType": 29,
+                #  "solutionComponentUniqueName": "d2f7f0e2-a1a9-eb11-b1ac-000d3a53c3c2",
+                #  "solutionComponentName": My Other Flow,
+                #  "ownerEmail": "#{owner.ownerEmail}#"
+                #}
+                #]
+                $flowResult =  Get-CrmRecord -conn $conn -EntityLogicalName workflow -Id $solutionComponent.objectid -Fields solutionid, name
+                $flowConfig = $null
+                $flowActivationUserConfig = $null
+                $flowSharingConfig = $null
+                $workflowName = $solutionComponent.objectid
+                $placeholdername = $flowResult.name.replace(' ','') + '.' + $solutionComponent.objectid
+                $ownerConfigVariable = "#{owner.ownerEmail." + $placeholdername + "}#"
+                #Create the flow owner deployment settings
+                $flowConfig = [PSCustomObject]@{"solutionComponentType"=$solutioncomponent.componenttype_Property.Value.Value; "solutionComponentName"=$flowResult.name; "solutionComponentUniqueName"=$workflowName; "ownerEmail"="$ownerConfigVariable"}
+                $cofigurationVariables.Add($ownerConfigVariable)
+                $flowOwnerships.Add($flowConfig)
+
+                #Create the flow sharing deployment settings
+                $sharingConfigVariable = "#{flow.sharing." + $placeholdername + "}#"
+                $flowSharingConfig = [PSCustomObject]@{"solutionComponentName"=$flowResult.name; "solutionComponentUniqueName"=$workflowName; "aadGroupTeamName"="$sharingConfigVariable"}
+                $cofigurationVariables.Add($sharingConfigVariable)
+                $flowSharings.Add($flowSharingConfig)
+
+                #Create the flow activation user deployment settings
+                $sortOrderConfigVariable = "#{activateflow.order." + $placeholdername + "}#"
+                $activateConfigVariable = "#{activateflow.activate." + $placeholdername + "}#"
+                $activateUserConfigVariable = "#{activateflow.activateas." + $placeholdername + "}#"
+                $flowActivationUserConfig = [PSCustomObject]@{"solutionComponentName"=$flowResult.name; "solutionComponentUniqueName"=$workflowName; "activateAsUser"="$activateUserConfigVariable"; "sortOrder"="$sortOrderConfigVariable"; "activate"="$activateConfigVariable"}
+                $cofigurationVariables.Add($sortOrderConfigVariable)
+                $cofigurationVariables.Add($activateConfigVariable)
+                $cofigurationVariables.Add($activateUserConfigVariable)
+                $flowActivationUsers.Add($flowActivationUserConfig)
+            }
+        }
+
+        $newConfiguration = [PSCustomObject]@{}
+        $newConfiguration | Add-Member -MemberType NoteProperty -Name 'EnvironmentVariables' -Value $environmentVariables
+        $newConfiguration | Add-Member -MemberType NoteProperty -Name 'ConnectionReferences' -Value $connectionReferences
+
+        $json = ConvertTo-Json -Depth 10 $newConfiguration
+        Set-Content -Path $deploymentSettingsFilePath -Value $json
+
+        $newCustomConfiguration = [PSCustomObject]@{}
+        $newCustomConfiguration | Add-Member -MemberType NoteProperty -Name 'ActivateFlowConfiguration' -Value $flowActivationUsers
+        $newCustomConfiguration | Add-Member -MemberType NoteProperty -Name 'ConnectorShareWithGroupTeamConfiguration' -Value $customConnectorSharings
+        $newCustomConfiguration | Add-Member -MemberType NoteProperty -Name 'SolutionComponentOwnershipConfiguration' -Value $flowOwnerships
+        $newCustomConfiguration | Add-Member -MemberType NoteProperty -Name 'FlowShareWithGroupTeamConfiguration' -Value $flowSharings
+        $newCustomConfiguration | Add-Member -MemberType NoteProperty -Name 'AadGroupCanvasConfiguration' -Value $canvasApps
+        $newCustomConfiguration | Add-Member -MemberType NoteProperty -Name 'AadGroupTeamConfiguration' -Value $groupTeams
+        #Convert the updated configuration to json and store in customDeploymentSettings.json
+        $json = ConvertTo-Json -Depth 10 $newCustomConfiguration
+        Set-Content -Path $customDeploymentSettingsFilePath -Value $json
+
         if("$generateAADGroupTeamConfig" -ne "false") {
             Set-EnvironmentDeploymentSettingsConfiguration $buildSourceDirectory $repo $solutionName $newCustomConfiguration $newConfigurationData
         }
@@ -296,6 +230,7 @@
             $definitionId = $buildDefinitionResult.id
             $newBuildDefinitionVariables = $buildDefinitionResult.variables
             #Loop through each of the tokens stored above and find an associated variable in the configuration data passed in from AA4AM
+
             foreach($configurationVariable in $cofigurationVariables) {
                 $found = $false
                 $configurationVariable = $configurationVariable.replace('#{', '')
@@ -312,17 +247,14 @@
                 if(!$found) {
                     $newBuildDefinitionVariables | Add-Member -MemberType NoteProperty -Name $configurationVariable -Value @{value = ''}
                 }
+
+                $variable = $deploymentConfigurationData | Where-Object { $_.Build -eq $buildDefinitionResult.name -and $_.Name -eq $configurationVariable } | Select-Object -First 1
                 # Set the value to the value passed in on the configuration data
-                foreach($variable in $deploymentConfigurationData) {
-                    if($variable.Build -eq $buildDefinitionResult.name -and $variable.Name -eq $configurationVariable) {
-                        if($null -eq $variable.Value -or [string]::IsNullOrWhiteSpace($variable.Value)) {
-                            $newBuildDefinitionVariables.$configurationVariable.value = ''
-                        }
-                        else {
-                            $newBuildDefinitionVariables.$configurationVariable.value = $variable.Value
-                        }
-                        break
-                    }
+                if($null -eq $variable -or $null -eq $variable.Value -or [string]::IsNullOrWhiteSpace($variable.Value)) {
+                    $newBuildDefinitionVariables.$configurationVariable.value = ''
+                }
+                else {
+                    $newBuildDefinitionVariables.$configurationVariable.value = $variable.Value
                 }
             }
 
@@ -437,12 +369,11 @@ function Invoke-DeploymentSettingsConfiguration-Test()
 {
     $testConfig = Get-Content ".\TestData\test.config.json" | ConvertFrom-Json
     $json = ConvertTo-Json $testConfig
+
     Write-Output $json
     Install-Module $testConfig.microsoftXrmDataPowerShellModule -RequiredVersion $testConfig.xrmDataPowerShellVersion
     $pat = $testConfig.accessToken
     $token = [System.Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes(":$($pat)"))
     $env:SYSTEM_ACCESSTOKEN = $token
-    $configurationDataJson = $testConfig.configurationDataJson
-    Set-DeploymentSettingsConfiguration $testConfig.buildSourceDirectory $testConfig.buildRepositoryName $testConfig.cdsBaseConnectionString $testConfig.xrmDataPowerShellVersion $testConfig.microsoftXrmDataPowerShellModule $testConfig.orgUrl $testConfig.projectId $testConfig.projectName $testConfig.repo "Basic" $testConfig.serviceConnection $testConfig.solutionName $testConfig.profileEnvironmentUrl $testConfig.profileId $configurationDataJson $testConfig.generateEnvironmentVariables $testConfig.generateConnectionReferences $testConfig.generateOwnershipConfig $testConfig.generateCanvasSharingConfig $testConfig.generateAADGroupTeamConfig $testConfig.generateCustomConnectorConfig $testConfig.overwriteExisting
+    Set-DeploymentSettingsConfiguration $testConfig.buildSourceDirectory $testConfig.buildRepositoryName $testConfig.cdsBaseConnectionString $testConfig.xrmDataPowerShellVersion $testConfig.microsoftXrmDataPowerShellModule $testConfig.orgUrl $testConfig.projectId $testConfig.projectName $testConfig.repo "Basic" $testConfig.serviceConnection $testConfig.solutionName $testConfig.profileEnvironmentUrl $testConfig.profileId $testConfig.configurationDataJson $testConfig.generateEnvironmentVariables $testConfig.generateConnectionReferences $testConfig.generateFlowConfig $testConfig.generateCanvasSharingConfig $testConfig.generateAADGroupTeamConfig $testConfig.generateCustomConnectorConfig
 }
-#Invoke-DeploymentSettingsConfiguration-Test
