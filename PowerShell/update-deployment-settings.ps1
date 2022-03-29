@@ -335,13 +335,16 @@ function New-DeploymentPipelines($buildRepositoryName, $orgUrl, $projectName, $r
 {
     if($null -ne $profileId) {
         $deploymentSteps = Get-CrmRecords -conn $settingsConn -EntityLogicalName cat_deploymentstep -FilterAttribute "cat_deploymentprofileid" -FilterOperator "eq" -FilterValue $profileId -Fields cat_deploymentenvironmentid,cat_name
-
+        Write-Host "Retrieved " $deploymentSteps.Count " deployment steps for " $profileId
         #Update / Create Deployment Pipelines
         $buildDefinitionResourceUrl = "$orgUrl$projectId/_apis/build/definitions?name=deploy-*-$solutionName&includeAllProperties=true&api-version=6.0"
+        Write-Host $buildDefinitionResourceUrl
         $fullBuildDefinitionResponse = Invoke-RestMethod $buildDefinitionResourceUrl -Method Get -Headers @{
             Authorization = "$azdoAuthType  $env:SYSTEM_ACCESSTOKEN"
         }
         $buildDefinitionResponseResults = $fullBuildDefinitionResponse.value
+        Write-Host "Retrieved " $buildDefinitionResponseResults.length " builds" $env:SYSTEM_ACCESSTOKEN
+
         if($buildDefinitionResponseResults.length -lt $deploymentSteps.Count) {
             $currentPath = Get-Location
             if(Test-Path -Path "../coe-starter-kit-source") {
