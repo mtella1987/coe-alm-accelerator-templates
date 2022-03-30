@@ -14,7 +14,7 @@ steps:
 
     $environmentName = "$(EnvironmentId)"
 
-    $systemusers = Get-CrmRecords -conn $conn -EntityLogicalName systemuser -FilterAttribute domainname -FilterOperator eq -FilterValue "$(Build.RequestedForEmail)" -Fields azureactivedirectoryobjectid
+    $systemusers = Get-CrmRecords -conn $conn -EntityLogicalName systemuser -FilterAttribute "internalemailaddress" -FilterOperator eq -FilterValue "$(Build.RequestedForEmail)" -Fields azureactivedirectoryobjectid
     if($systemusers.Count -gt 0) {
 
         $azureactivedirectoryobjectid = $systemusers.CrmRecords[0].azureactivedirectoryobjectid

@@ -57,7 +57,7 @@ steps:
             }      
           }
           Write-Host "Retrieving User Record"
-          $systemuserResult = Get-CrmRecords -conn $conn -EntityLogicalName systemuser -FilterAttribute "domainname" -FilterOperator "eq" -FilterValue $ownershipConfig.ownerEmail -Fields systemuserid
+          $systemuserResult = Get-CrmRecords -conn $conn -EntityLogicalName systemuser -FilterAttribute "internalemailaddress" -FilterOperator "eq" -FilterValue $ownershipConfig.ownerEmail -Fields systemuserid
           $workflowDeactivated = $false
           if($systemuserResult.Count -gt 0) {
               $systemUserId = $systemuserResult.CrmRecords[0].systemuserid

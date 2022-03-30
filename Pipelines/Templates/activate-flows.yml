@@ -46,7 +46,7 @@ steps:
     foreach ($activateConfig in $config){
         if($activateConfig.activateAsUser -ne '' -and $activateConfig.solutionComponentUniqueName -ne '' -and $activateConfig.activate -ne 'false'){
             $workflow = Get-CrmRecord -conn $conn -EntityLogicalName workflow -Id $activateConfig.solutionComponentUniqueName -Fields clientdata,category,statecode
-            $systemuserResult = Get-CrmRecords -conn $conn -EntityLogicalName systemuser -FilterAttribute "domainname" -FilterOperator "eq" -FilterValue $activateConfig.activateAsUser -Fields systemuserid
+            $systemuserResult = Get-CrmRecords -conn $conn -EntityLogicalName systemuser -FilterAttribute "internalemailaddress" -FilterOperator "eq" -FilterValue $activateConfig.activateAsUser -Fields systemuserid
             if($systemuserResult.Count -gt 0) {
                 $systemUserId = $systemuserResult.CrmRecords[0].systemuserid
 
@@ -130,7 +130,7 @@ steps:
                             # The ConnectionOwner variable may contain an email address - if so change the attribute we filter on
                             $filterAttribute = "azureactivedirectoryobjectid"
                             if($systemUserId -Match "@") {
-                                $filterAttribute = "domainname"
+                                $filterAttribute = "internalemailaddress"
                             }
 
                             # Get Dataverse systemuserid for the system user that maps to the aad user guid that created the connection 
