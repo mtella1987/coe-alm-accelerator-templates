@@ -163,7 +163,7 @@ steps:
         # Temporarily reverting to PASOPA instead of PAC CLI to better control versioning of canvas unpack in our pipelines
         #$(Agent.BuildDirectory)\PipelineUtils\CanvasUnpack\pasopa.exe -unpack $_.FullName $unpackedPath
         Write-Host "Unpacking via Power Platform CLI"
-        $(Agent.BuildDirectory)\PipelineUtils\PowerPlatformCLI\pac.exe canvas  -unpack $_.FullName $unpackedPath
+        $(Agent.BuildDirectory)\PipelineUtils\PowerPlatformCLI\pac.exe canvas unpack --msapp $_.FullName --sources $unpackedPath
 
         if( -not $?)
         {
