@@ -5,6 +5,8 @@ parameters:
   type: string
 - name: solutionComponentOwnershipConfiguration
   type: string
+- name: activateFlowConfiguration
+  type: string
 - name: updateComponentOnwership
   type: string
 - name: enableFlows
@@ -32,7 +34,7 @@ steps:
     $config = ConvertFrom-Json '${{parameters.solutionComponentOwnershipConfiguration}}'
     if('${{parameters.enableFlows}}' -ne "false") {
         # Retrieve the activation config to use when activating flows for owners
-        $activationConfigs = ConvertFrom-Json '$(outActivateFlows.outActivateFlows)'
+        $activationConfigs = ConvertFrom-Json '${{parameters.activateFlowConfiguration}}'
         $activationConfigs | Sort-Object [int]sortOrder
 
         $flowsToActivate = [System.Collections.ArrayList]@()

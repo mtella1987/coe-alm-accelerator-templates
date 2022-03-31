@@ -9,6 +9,10 @@ parameters:
   default: 'Both'
 
 steps:  
+- template: set-spn-token.yml
+  parameters:
+    serviceConnection: '$(ServiceConnection)'
+
 # Set pipeline vars for tools paths.
 - template: set-tools-paths.yml
     
@@ -32,19 +36,6 @@ steps:
    }
   displayName: 'Update Solution XML with Build Number'
   condition: and(succeeded(), ne('${{parameters.buildType}}', 'Unmanaged'))
-    
-# Before we committed changes, we formatted all json files for readability in source control.  This breaks solution package, so we need to flatten them before packing   
-#- pwsh: |
-    #When we unpack the solution files, we format the json, but it causes solution import failures so we need to flatten the files
-#    Get-ChildItem -Path "$(Build.SourcesDirectory)\$(RepoName)\$(SolutionName)" -Recurse -Filter *.json |
-#    ForEach-Object {
-#        $fileContent = (Get-Content $_.FullName) -join ' '
-#        if(-not [string]::IsNullOrWhiteSpace($fileContent)) {
-#            Set-Content $_.FullName $fileContent
-#        }
-#    }
-#  displayName: 'Flatten JSON files'
-#  enabled: true
 
 - powershell: |
     $manifestVersion = ''
@@ -60,13 +51,6 @@ steps:
     Write-Host "Version: $manifestVersion"
   displayName: 'Get Unpacked Version'
   condition: succeeded()
-
-# TEMPORARY WORKAROUND: Power Apps CLI functionality will eventually be surfaced in Azure DevOps tasks.
-# However, to use functionality ahead of the tasks, we install the CLI.  Once the task is available, we move to using the task.
-# Temporarily reverting to PASOPA instead of PAC CLI to better control versioning of canvas unpack in our pipelines
-#- template: install-pac.yml
-#  parameters:
-#    canvasUnpackVersion: $(ManifestVersion)
 
 # Pack canvas app source files into msapp
 - pwsh: |
@@ -90,6 +74,54 @@ steps:
    }
   displayName: 'pack msapp files'
   enabled: true
+  
+# Set paths to deployment settings
+- template: set-deployment-configuration-paths.yml
+  parameters:
+    configPath: $(Build.SourcesDirectory)\$(RepoName)\$(SolutionName)\config\
+    environmentName: $(EnvironmentName)
+    
+# Update any deploymentSettings.json via FileTransform task. This task will replace values in a JSON file based on their path. See https://docs.microsoft.com/en-us/azure/devops/pipelines/tasks/transforms-variable-substitution?view=azure-devops&tabs=Classic#jsonvarsubs
+- task: FileTransform@1
+  displayName: 'File Transformation: deploymentSettings.json'
+  inputs:
+    folderPath: $(Build.SourcesDirectory)\$(RepoName)\$(SolutionName)\config\
+    targetFiles: '*deploymentSettings*.json'
+    fileType: json
+  condition: and(succeeded(), or(ne(variables['DeploymentSettingsPath'], ''), ne(variables['CustomDeploymentSettingsPath'], '')))
+
+# Third party task to replace tokens in files. The FileTransform above replaces JSON tokens based on their path as opposed to replacing text tokens in a file which can be more error prone in some cases.
+# If you aren't using this task it can be safely removed or disabled by setting enabled: false. Sample token: #{VariableNameToReplace}#
+- task: qetza.replacetokens.replacetokens-task.replacetokens@3
+  displayName: 'Replace Tokens: deploymentSettings.json'
+  inputs:
+    rootDirectory: $(Build.SourcesDirectory)\$(RepoName)\$(SolutionName)\config\
+    targetFiles: '*deploymentSettings*.json'
+    actionOnMissing: 'silently continue'
+    writeBOM: false
+    encoding: 'utf-8'
+    defaultValue: ''
+  condition: and(succeeded(), or(ne(variables['DeploymentSettingsPath'], ''), ne(variables['CustomDeploymentSettingsPath'], '')))
+  enabled: true
+    
+  
+# Set deployment variable for Activate Flow Configuration
+- template: set-deployment-variable.yml
+  parameters:
+    variableName: 'outActivateFlows'
+    pipelineVariableValue: ''
+    deploymentSettingsPath: $(CustomDeploymentSettingsPath)
+    deploymentSettingsNode: 'ActivateFlowConfiguration'
+    displayName: 'Retrieve Flow Activation Config for Build'
+
+# Enabled or Disable Flows in the Solution based on configuration
+- template: enable-disable-solution-flows.yml
+  parameters:
+    buildSourceDirectory: '$(Build.SourcesDirectory)'
+    repo: '$(RepoName)'
+    solutionName: '$(SolutionName)'
+    disableAllFlows: 'false'
+    activateFlowConfiguration: '$(outActivateFlows)'
 
 #Pack the solution based on the build type parameter (Unmanaged, Managed or Both)
 - task: microsoft-IsvExpTools.PowerPlatform-BuildTools.pack-solution.PowerPlatformPackSolution@0
