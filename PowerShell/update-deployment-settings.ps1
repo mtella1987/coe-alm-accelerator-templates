@@ -119,8 +119,8 @@
                 #]
                 $envVarResult =  Get-CrmRecord -conn $conn -EntityLogicalName environmentvariabledefinition -Id $solutionComponent.objectid -Fields schemaname, type
 				#Exclude secret variables for now until support added to deployment configuration
-                Write-Host "Environment Variable is Secret" + $envVarResult.schemaname + $envVarResult.type
-				if($envVarResult.type -ne 100000005) {
+                Write-Host "Environment Variable is Secret" + $envVarResult.schemaname + $envVarResult.type_Property.Value.Value
+				if($envVarResult.type_Property.Value.Value -ne 100000005) {
                     $envVar = $null
                     $envVarName = $envVarResult.schemaname
 
