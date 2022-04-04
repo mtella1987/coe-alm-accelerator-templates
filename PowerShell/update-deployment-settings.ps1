@@ -117,14 +117,17 @@
                   #  "Value": "#{environmentvariable.cat_ConnectorHostUrl}#"
                   #}
                 #]
-                $envVarResult =  Get-CrmRecord -conn $conn -EntityLogicalName environmentvariabledefinition -Id $solutionComponent.objectid -Fields schemaname
-                $envVar = $null
-                $envVarName = $envVarResult.schemaname
+                $envVarResult =  Get-CrmRecord -conn $conn -EntityLogicalName environmentvariabledefinition -Id $solutionComponent.objectid -Fields schemaname, type
+				#Exclude secret variables for now until support added to deployment configuration
+				if($envVarResult.type -ne 100000005) {
+                    $envVar = $null
+                    $envVarName = $envVarResult.schemaname
 
-                $envVarConfigVariable = "#{environmentvariable." + $envVarName + "}#"
-                $envVar = [PSCustomObject]@{"SchemaName"="$envVarName"; "Value"="$envVarConfigVariable" }
-                $cofigurationVariables.Add($envVarConfigVariable)
-                $environmentVariables.Add($envVar)
+                    $envVarConfigVariable = "#{environmentvariable." + $envVarName + "}#"
+                    $envVar = [PSCustomObject]@{"SchemaName"="$envVarName"; "Value"="$envVarConfigVariable" }
+                    $cofigurationVariables.Add($envVarConfigVariable)
+                    $environmentVariables.Add($envVar)
+                }
             }
             #Canvas App
             elseif($solutioncomponent.componenttype_Property.Value.Value -eq 300 -and "$generateCanvasSharingConfig" -ne "false") {
