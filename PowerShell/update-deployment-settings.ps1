@@ -128,6 +128,9 @@
                     $cofigurationVariables.Add($envVarConfigVariable)
                     $environmentVariables.Add($envVar)
                 }
+                else {
+					Write-Host "Skipping secret environment variable: " + $envVarResult.schemaname
+                }
             }
             #Canvas App
             elseif($solutioncomponent.componenttype_Property.Value.Value -eq 300 -and "$generateCanvasSharingConfig" -ne "false") {
