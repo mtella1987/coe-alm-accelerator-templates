@@ -117,9 +117,10 @@
                   #  "Value": "#{environmentvariable.cat_ConnectorHostUrl}#"
                   #}
                 #]
-                $envVarResult =  Get-CrmRecord -conn $conn -EntityLogicalName environmentvariabledefinition -Id $solutionComponent.objectid -Fields schemaname, secretstore
+                $envVarResult =  Get-CrmRecord -conn $conn -EntityLogicalName environmentvariabledefinition -Id $solutionComponent.objectid -Fields schemaname, type
 				#Exclude secret variables for now until support added to deployment configuration
-				if($envVarResult.secretstore -ne $null) {
+                Write-Host "Environment Variable is Secret" + $envVarResult.schemaname + $envVarResult.type
+				if($envVarResult.type -ne 100000005) {
                     $envVar = $null
                     $envVarName = $envVarResult.schemaname
 
