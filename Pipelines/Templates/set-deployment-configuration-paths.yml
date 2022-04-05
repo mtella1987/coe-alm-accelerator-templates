@@ -4,6 +4,7 @@ parameters:
 - name: environmentName
   type: string
 steps:
+- powershell: Get-ChildItem -Path "${{ parameters.configPath }}" -recurse
   #Check for deployment settings for this environment
 - powershell: |
 
