@@ -18,7 +18,7 @@ steps:
     $conn = Get-CrmConnection -ConnectionString "$(CdsBaseConnectionString)${{parameters.serviceConnection}}"
 
     $activationConfig = ConvertFrom-Json '${{parameters.activateFlowConfiguration}}'
-    $activationConfig | Sort-Object [int]sortOrder
+    $activationConfig | Sort-Object @{e={$_.sortOrder -as [int]}}
 
     # json config value must follow this format
     #[
@@ -92,7 +92,7 @@ steps:
 
             # Retrieve the activation config to use when activating flows for connection references
             $activationConfigs = ConvertFrom-Json '${{parameters.activateFlowConfiguration}}'
-            $activationConfigs | Sort-Object [int]sortOrder
+            $activationConfig | Sort-Object @{e={$_.sortOrder -as [int]}}
 
             $flowsToActivate = [System.Collections.ArrayList]@()
 
@@ -164,7 +164,7 @@ steps:
                 }
             }
             #Activate any flows added to the collection based on sort order
-            $flowsToActivate | Sort-Object [int]sortOrder
+            $flowsToActivate | Sort-Object @{e={$_.sortOrder -as [int]}}
             foreach($flowToActivate in $flowsToActivate) {
                 Write-Host "Activating Flow: " $flowToActivate.solutionComponent.name
                 $impersonationConn.OrganizationWebProxyClient.CallerId = $flowToActivate.impersonationCallerId 
