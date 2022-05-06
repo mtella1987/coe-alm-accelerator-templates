@@ -25,7 +25,7 @@ resources:
   - repository: SourceRepo
     type: github
     endpoint: coe-starter-kit
-    name: Microsoft/coe-starter-kit
+    name: $(GitHubRepo)
     
 variables:
 - group: alm-accelerator-variable-group
