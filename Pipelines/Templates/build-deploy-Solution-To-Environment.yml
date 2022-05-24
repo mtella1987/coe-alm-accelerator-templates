@@ -12,8 +12,8 @@ stages:
     steps:
     - template: build-unmanaged-managed-Solution.yml
 
-    - template: deploy-Solution.yml
-      parameters:
-        serviceConnection: '$(ServiceConnection)'
-        importUnmanaged: '$(ImportUnmanaged)'
-        skipBuildToolsInstaller: 'true'
+#    - template: deploy-Solution.yml
+#     parameters:
+#       serviceConnection: '$(ServiceConnection)'
+#       importUnmanaged: '$(ImportUnmanaged)'
+#       skipBuildToolsInstaller: 'true'
