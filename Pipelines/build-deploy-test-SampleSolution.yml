@@ -5,7 +5,7 @@ resources:
     type: github
     ref: test-d365 #BranchContainingTheBuildTemplates  # If your pipeline templates are in a branch other than the default branch specify the branch here. Otherwise the default branch will be used by default.
     name: mtella1987/coe-alm-accelerator-templates #$(Build.Repository.Name) #self #RepositoryContainingTheBuildTemplates  #This is the name of the repo in the current project in Azure Devops that has the pipeline templates. If the repo is in a different project you can specify the project and repo using the format ProjectContainingTheBuildTemplates/RepositoryContainingTheBuildTemplates (https://docs.microsoft.com/en-us/azure/devops/pipelines/yaml-schema?view=azure-devops&tabs=schema%2Cparameter-schema#type)
-    endpoint: mtella1987
+    endpoint: mtella1987 # endpoint definition
 trigger:
   branches:
     include:
